@@ -1,9 +1,15 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Inject } from '@nestjs/common';
 import { ApiConfigService } from '../../shared/services/config.service';
+import { PRICE_RESOLUTION_STRATEGY } from './market.constants';
+import { IPriceResolutionStrategy } from './strategies/price-resolution.strategy.interface';
 
 @Injectable()
 export class MarketService {
-  constructor(private readonly configService: ApiConfigService) {}
+  constructor(
+    private readonly configService: ApiConfigService,
+    @Inject(PRICE_RESOLUTION_STRATEGY)
+    private readonly priceResolutionStrategy: IPriceResolutionStrategy,
+  ) {}
 
   /**
    * Checks if the market is open on a given date.
@@ -38,19 +44,11 @@ export class MarketService {
   }
 
   /**
-   * Returns the effective stock price.
+   * Returns the effective stock price using the injected PriceResolutionStrategy.
    * If a custom market price is provided (> 0), it takes priority.
    * Otherwise, falls back to the default fixed stock price ($100).
    */
   getEffectiveStockPrice(ticker: string, customPrice?: number): number {
-    if (
-      customPrice !== undefined &&
-      customPrice !== null &&
-      !isNaN(customPrice) &&
-      customPrice > 0
-    ) {
-      return customPrice;
-    }
-    return this.configService.defaultStockPrice;
+    return this.priceResolutionStrategy.resolvePrice(ticker, customPrice);
   }
 }
