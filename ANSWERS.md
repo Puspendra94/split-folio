@@ -2,6 +2,8 @@
 
 This document provides detailed answers to the evaluation questions outlined in the **Ionixx Backend Developer Technical Challenge** specification.
 
+> 💡 **For a deep code and architectural walkthrough of core business logic (Pluggable Storage Abstraction, Ticker Deduplication, Non-Market Day Scheduling, Fractional Share Precision Math, Portfolio Weight Sync, and Request Validation), see the [README.md Technical Walkthrough](README.md#core-business-logic--technical-walkthrough).**
+
 ---
 
 ## 1. What was your approach (thought process) to tackling this project?
@@ -29,11 +31,12 @@ In financial order management systems, data integrity and mathematical accuracy 
 1. **Default Stock Price**: As specified in the prompt, stock prices default to **$100 per share** if omitted (configurable via `DEFAULT_STOCK_PRICE=100` in `.env`). However, if a partner passes a positive `customMarketPrice` for any stock, the custom market price takes priority.
 2. **Share Quantity Truncation**: Fractional share quantities are floored (truncated) to the configured decimal precision (`SHARE_DECIMAL_PRECISION=3` in `.env`) rather than rounded up. This guarantees that the total dollar amount needed to place order items never exceeds the user's specified `totalAmount`.
 3. **Market Trading Schedule**:
-   - Trading hours are assumed to be **Monday through Friday** (09:30 to 16:00 EST / 09:00 UTC schedule).
+   - Trading hours are assumed to be **Monday through Friday** (09:00 to 16:00 UTC schedule).
    - If an order is submitted during open market hours, its status is set to `EXECUTED`.
    - If an order is submitted outside trading hours or over the weekend (Saturday/Sunday), its status is set to `SCHEDULED` and assigned an execution timestamp for the next trading day at 09:00 UTC.
 4. **Portfolio Completion Status (`isComplete`)**: A saved model portfolio is marked `isComplete = true` only when its cumulative stock allocation percentage equals **100%**. Orders submitted via `portfolioId` require `isComplete = true`.
 5. **Ticker Deduplication Across Batch Saves and Order Splits**: If duplicate stock tickers are supplied in portfolio management payloads (`POST /api/portfolios/:id/stocks/batch`, `POST /api/portfolios`) OR inline order split payloads (`POST /api/orders/split`), the deduplication logic strictly keeps the last value supplied for each ticker. Crucially, total allocation weightage is calculated only AFTER ticker deduplication has been applied.
+6. **Timezone Handling**: The system does not implement custom regional timezone conversions or market holiday calendars; all date, time, and trading schedule calculations operate strictly on the system default **UTC timezone**.
 
 ---
 
