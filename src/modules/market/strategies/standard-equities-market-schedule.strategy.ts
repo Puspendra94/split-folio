@@ -2,9 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { IMarketScheduleStrategy } from './market-schedule.strategy.interface';
 
 @Injectable()
-export class StandardEquitiesMarketScheduleStrategy
-  implements IMarketScheduleStrategy
-{
+export class StandardEquitiesMarketScheduleStrategy implements IMarketScheduleStrategy {
   /**
    * Checks if the market is open on a given date.
    * Markets are open Monday through Friday.

@@ -91,7 +91,7 @@ This section provides a deep technical walkthrough of the core architectural pat
 ### 1. Pluggable Storage Abstraction Layer
 
 #### **The Idea**
-Production applications require persistent databases (e.g. PostgreSQL), whereas technical evaluation environments or microservices may require zero-dependency in-memory execution. The storage layer must be completely decoupled from core business services (`PortfolioService`, `OrderService`, `PortfolioStockService`).
+Production applications require persistent databases (e.g. PostgreSQL), whereas standalone environments or microservices may require zero-dependency in-memory execution. The storage layer must be completely decoupled from core business services (`PortfolioService`, `OrderService`, `PortfolioStockService`).
 
 #### **Code & Architecture Implementation**
 1. **Abstract Interfaces**: Defined repository interfaces (`IPortfolioRepository`, `IPortfolioStockRepository`, `IOrderRepository`) under `src/storage/interfaces/`.
@@ -342,7 +342,7 @@ If an invalid payload is sent, NestJS's global `ValidationPipe` immediately reje
 - **How Implemented**:
   - Abstract repository interfaces define complete data access contracts.
   - `StorageModule` inspects `STORAGE_DRIVER=inmemory|postgres` from `.env` at startup and dynamically binds either In-Memory JavaScript `Map` repositories or PostgreSQL TypeORM repositories to abstract injection tokens (`PORTFOLIO_REPOSITORY`, `ORDER_REPOSITORY`, etc.).
-- **Why Implemented & Benefits**: Complete decoupling of data persistence from application domain logic. Allows zero-dependency instant startup (`STORAGE_DRIVER=inmemory`) for testing and evaluation while supporting enterprise PostgreSQL production databases with zero code changes in controllers or services.
+- **Why Implemented & Benefits**: Complete decoupling of data persistence from application domain logic. Allows zero-dependency instant startup (`STORAGE_DRIVER=inmemory`) for testing and development while supporting enterprise PostgreSQL production databases with zero code changes in controllers or services.
 
 ---
 
@@ -668,4 +668,4 @@ src/
 
 ## License
 
-This project is submitted as part of the technical challenge assessment.
+SplitFolio is open-source software released under the [MIT License](LICENSE).

@@ -21,10 +21,6 @@ import { StandardEquitiesMarketScheduleStrategy } from './strategies/standard-eq
     },
     MarketService,
   ],
-  exports: [
-    MarketService,
-    PRICE_RESOLUTION_STRATEGY,
-    MARKET_SCHEDULE_STRATEGY,
-  ],
+  exports: [MarketService, PRICE_RESOLUTION_STRATEGY, MARKET_SCHEDULE_STRATEGY],
 })
 export class MarketModule {}
