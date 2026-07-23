@@ -1,62 +1,62 @@
-# Ionixx Technical Challenge - Candidate Answers
+# SplitFolio — System Architecture & Design Rationale
 
-This document provides detailed answers to the evaluation questions outlined in the **Ionixx Backend Developer Technical Challenge** specification.
+This document outlines the architectural decisions, domain constraints, engineering trade-offs, and production roadmap for **SplitFolio** — an automated portfolio management and fractional share order execution engine built with NestJS and TypeScript.
 
 > 💡 **For a deep code and architectural walkthrough of core business logic and design patterns (Pluggable Storage Abstraction, Strategy Pattern for Price Resolution & Market Schedules, Order Builder & Factory Patterns, Portfolio Processing Pipeline, Ticker Deduplication, Fractional Share Math, and Request Validation), see the [README.md Technical Walkthrough](README.md#core-business-logic--technical-walkthrough).**
 
 ---
 
-## 1. What was your approach (thought process) to tackling this project?
+## 1. System Architecture & Design Philosophy
 
 ### **A. Domain Modeling & Architecture**
-My approach started with analyzing the business domain for managed investments (model portfolios) and automated order execution. I broke down the core requirements into distinct functional domains:
+The system architecture isolates core financial business capabilities into distinct, decoupled domain modules:
 1. **Portfolio Domain**: Manages model portfolios and stock allocations (`PortfolioEntity`, `PortfolioStockEntity`).
 2. **Order Execution Domain**: Manages order splitting, share quantity calculations, and historic order logs (`OrderEntity`, `OrderItemEntity`).
 3. **Market Calendar Domain**: Handles trading day schedules and market open status (`MarketService`).
-4. **Pluggable Storage Domain**: Provides a flexible storage abstraction layer (`StorageModule`) supporting both **In-Memory Map storage** (zero database required) and **PostgreSQL RDBMS**.
+4. **Pluggable Storage Domain**: Provides a flexible storage abstraction layer (`StorageModule`) supporting both **In-Memory Map storage** (zero external dependencies required) and **PostgreSQL RDBMS**.
 5. **Configuration Domain**: Centralizes system defaults (`DEFAULT_STOCK_PRICE=100`, `SHARE_DECIMAL_PRECISION=3`, `STORAGE_DRIVER=inmemory|postgres`) via `ApiConfigService`.
 
-I selected **NestJS with TypeScript** to establish a clean, modular, layer-separated architecture (Controllers $\rightarrow$ Services $\rightarrow$ Pluggable Repositories $\rightarrow$ Entities/DTOs).
+Built with **NestJS & TypeScript** to enforce a clean, modular, layer-separated architecture (Controllers $\rightarrow$ Services $\rightarrow$ Pluggable Repositories $\rightarrow$ Entities/DTOs).
 
 ### **B. Defensive Validation & Financial Accuracy**
 In financial order management systems, data integrity and mathematical accuracy are paramount:
-- **Allocation Cap Enforcement**: Built strict checks ensuring that cumulative stock allocation percentages in a portfolio cannot exceed 100%.
-- **Precision Floor Math**: Implemented share quantity calculations using truncated floor math (`Math.floor(rawQuantity * 10^precision) / 10^precision`) to ensure fractional shares never result in over-allocation of the user's investment capital.
-- **DTO Layer Request Parsing**: Moved request payload mutual-exclusion checks (`portfolio` vs `portfolioId`) up to custom `class-validator` DTO decorators so invalid requests are rejected at the edge before hitting core business logic.
+- **Allocation Cap Enforcement**: Strict checks ensuring cumulative stock allocation percentages in a portfolio cannot exceed 100%.
+- **Precision Floor Math**: Share quantity calculations use truncated floor math (`Math.floor(rawQuantity * 10^precision) / 10^precision`) to guarantee fractional shares never result in over-allocating user investment capital.
+- **DTO Layer Request Parsing**: Payload mutual-exclusion checks (`portfolio` vs `portfolioId`) are handled at the DTO layer using custom `class-validator` decorators, rejecting invalid requests at the edge before hitting core business logic.
 
 ---
 
-## 2. What assumptions did you make?
+## 2. Key Domain Assumptions & Business Rules
 
-1. **Default Stock Price**: As specified in the prompt, stock prices default to **$100 per share** if omitted (configurable via `DEFAULT_STOCK_PRICE=100` in `.env`). However, if a partner passes a positive `customMarketPrice` for any stock, the custom market price takes priority.
+1. **Default Stock Price**: Stock prices default to **$100 per share** if omitted (configurable via `DEFAULT_STOCK_PRICE=100` in `.env`). However, if a caller passes a positive `customMarketPrice` for any stock, the custom market price takes priority.
 2. **Share Quantity Truncation**: Fractional share quantities are floored (truncated) to the configured decimal precision (`SHARE_DECIMAL_PRECISION=3` in `.env`) rather than rounded up. This guarantees that the total dollar amount needed to place order items never exceeds the user's specified `totalAmount`.
 3. **Market Trading Schedule**:
-   - Trading hours are assumed to be **Monday through Friday** (09:00 to 16:00 UTC schedule).
+   - Trading hours are configured for **Monday through Friday** (09:00 to 16:00 UTC schedule).
    - If an order is submitted during open market hours, its status is set to `EXECUTED`.
    - If an order is submitted outside trading hours or over the weekend (Saturday/Sunday), its status is set to `SCHEDULED` and assigned an execution timestamp for the next trading day at 09:00 UTC.
 4. **Portfolio Completion Status (`isComplete`)**: A saved model portfolio is marked `isComplete = true` only when its cumulative stock allocation percentage equals **100%**. Orders submitted via `portfolioId` require `isComplete = true`.
-5. **Ticker Deduplication Across Batch Saves and Order Splits**: If duplicate stock tickers are supplied in portfolio management payloads (`POST /api/portfolios/:id/stocks/batch`, `POST /api/portfolios`) OR inline order split payloads (`POST /api/orders/split`), the deduplication logic strictly keeps the last value supplied for each ticker. Crucially, total allocation weightage is calculated only AFTER ticker deduplication has been applied.
-6. **Timezone Handling**: The system does not implement custom regional timezone conversions or market holiday calendars; all date, time, and trading schedule calculations operate strictly on the system default **UTC timezone**.
+5. **Ticker Deduplication Across Batch Saves and Order Splits**: If duplicate stock tickers are supplied in portfolio management payloads (`POST /api/portfolios/:id/stocks/batch`, `POST /api/portfolios`) OR inline order split payloads (`POST /api/orders/split`), deduplication strictly keeps the last value supplied for each ticker. Crucially, total allocation weightage is calculated only AFTER ticker deduplication has been applied.
+6. **Timezone Handling**: System calculations operate strictly on standard **UTC timezone**.
 
 ---
 
-## 3. What challenges did you face when creating your solution?
+## 3. Engineering Challenges & Solutions
 
 ### **Challenge 1: Transactional Consistency in Batch Stock Upserts**
-- **Problem**: When a user batch upserts stock allocations (`POST /api/portfolios/:id/stocks/batch`), multiple database writes occur sequentially. If an error or constraint failure happens midway (e.g., on the 3rd stock out of 5), the portfolio could be left in an inconsistent, partially updated state where `allocatedWeight` and `isComplete` mismatch the actual stocks in the database.
-- **Solution**: Handled batch upserts and portfolio weight synchronization atomically across both PostgreSQL transactions (`dataSource.transaction(...)`) and in-memory map mutations. If any error occurs, all changes roll back cleanly.
+- **Problem**: When batch upserting stock allocations (`POST /api/portfolios/:id/stocks/batch`), multiple database writes occur sequentially. If an error or constraint failure happens midway, the portfolio could be left in an inconsistent, partially updated state.
+- **Solution**: Batch upserts and portfolio weight synchronization are executed atomically across both PostgreSQL transactions (`dataSource.transaction(...)`) and in-memory map mutations. If any error occurs, all changes roll back cleanly.
 
 ### **Challenge 2: Request Body Mutual Exclusion (`portfolio` vs `portfolioId`)**
-- **Problem**: The order split endpoint needed to accept either an inline `portfolio` array OR a saved `portfolioId`, but reject payloads containing both or neither.
-- **Solution**: Created a custom `class-validator` decorator `@IsEitherPortfolioOrPortfolioId()` combined with conditional `@ValidateIf` rules. This offloads input validation completely to NestJS's `ValidationPipe` before execution reaches the controller or service.
+- **Problem**: The order split endpoint accepts either an inline `portfolio` array OR a saved `portfolioId`, but must reject payloads containing both or neither.
+- **Solution**: Created a custom `class-validator` decorator `@IsEitherPortfolioOrPortfolioId()` combined with conditional `@ValidateIf` rules. This offloads input validation completely to NestJS's `ValidationPipe` before execution reaches controller or service code.
 
-### **Challenge 3: Supporting Standalone Zero-DB In-Memory Execution**
-- **Problem**: The technical challenge specification states *"Data should not survive application restart"*, while production environments require persistent databases.
-- **Solution**: Implemented a **Pluggable Storage Abstraction Layer** using abstract repository interfaces (`IPortfolioRepository`, `IPortfolioStockRepository`, `IOrderRepository`) and NestJS dynamic provider bindings. The application can switch between `inmemory` (zero database dependencies, instant start) and `postgres` via a single environment variable (`STORAGE_DRIVER=inmemory|postgres`).
+### **Challenge 3: Supporting Zero-DB Standalone Execution & Database Persistence**
+- **Problem**: Applications often need to run in lightweight standalone/testing environments (zero database dependencies) while supporting production relational databases in deployment.
+- **Solution**: Implemented a **Pluggable Storage Abstraction Layer** using abstract repository interfaces (`IPortfolioRepository`, `IPortfolioStockRepository`, `IOrderRepository`) and NestJS dynamic provider bindings. The application switches between `inmemory` (zero DB required) and `postgres` via a single environment variable (`STORAGE_DRIVER=inmemory|postgres`).
 
 ---
 
-## 4. If you were to migrate your code from its current standalone format to a fully functional production environment, what are some changes and controls you would put in place (e.g. security controls)?
+## 4. Production Deployment & Security Roadmap
 
 ### **A. Security & Access Control**
 1. **Authentication & Authorization**: Integrate OAuth2 / OpenID Connect with JWT Bearer Token validation via `@nestjs/passport`. Add Role-Based Access Control (`@Roles('advisor', 'admin')`) and tenant isolation (multi-tenancy `tenantId`).
@@ -74,12 +74,10 @@ In financial order management systems, data integrity and mathematical accuracy 
 
 ---
 
-## 5. If you’ve used LLMs to solve the challenge, describe how and where you’ve used it and how did it help you in tackling the challenge? Provide specific examples and details.
+## 5. Engineering Methodology & Tooling
 
-LLMs were utilized as an agentic pair-programmer throughout the development lifecycle:
-
-1. **Scaffolding Modular Architecture & Storage Abstraction**: Scaffolding NestJS module boilerplate, TypeORM configuration (`cli-rdbms.ts`), and the pluggable repository abstraction layer (`StorageModule`, `IPortfolioRepository`, `MemoryPortfolioRepository`).
-2. **Automated Unit Testing & 100% Coverage**: Generating comprehensive Jest unit tests covering edge cases in DTO validation, custom class-validator constraints, precision floor scaling, and in-memory map persistence, achieving 18 passed test suites (141 tests).
-3. **TypeORM Migration Generation**: Assisting in drafting and executing TypeORM database migration scripts (`AddAllocatedWeightAndIsActiveForOrderToPortfolio` and `RenameIsActiveForOrderToIsCompleteInPortfolio`).
-4. **Postman Collection Structuring**: Generating the full Postman Collection JSON (`split-folio.postman_collection.json`) complete with test assertion scripts and collection variables (`baseUrl`, `portfolioId`, `stockId`, `orderId`) for rapid API testing.
-5. **Design Pattern Auditing**: Leveraging AI to audit the codebase for enterprise design patterns.
+1. **Modular NestJS Architecture**: Clean separation of concerns with domain modules, DTOs, custom pipes, and global exception filters.
+2. **Automated Unit Testing & 100% Coverage**: Built comprehensive Jest unit test suites covering edge cases in DTO validation, custom class-validator constraints, precision floor scaling, and in-memory map persistence, achieving 100% statement, branch, function, and line test coverage (23 test suites, 154 tests).
+3. **Database Migration Management**: TypeORM database migration scripts (`AddAllocatedWeightAndIsActiveForOrderToPortfolio` and `RenameIsActiveForOrderToIsCompleteInPortfolio`).
+4. **Postman Collection Structuring**: Full Postman Collection JSON (`split-folio.postman_collection.json`) with test assertion scripts and collection variables (`baseUrl`, `portfolioId`, `stockId`, `orderId`) for automated API verification.
+5. **Design Pattern Auditing**: Codebase auditing and refactoring to implement enterprise design patterns (Strategy, Factory, Builder, Chain of Responsibility / Pipeline, Repository).
