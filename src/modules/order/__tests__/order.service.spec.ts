@@ -5,6 +5,7 @@ import { OrderService } from '../order.service';
 import { OrderStatusEnum } from '../order.entity';
 import { PortfolioService } from '../../portfolio/portfolio.service';
 import { MarketService } from '../../market/market.service';
+import { OrderFactory } from '../factories/order.factory';
 import { OrderTypeEnum } from '../../../common/constants/order-type.enum';
 
 describe('OrderService', () => {
@@ -63,6 +64,7 @@ describe('OrderService', () => {
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
+        OrderFactory,
         OrderService,
         {
           provide: ORDER_REPOSITORY,

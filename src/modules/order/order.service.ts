@@ -7,13 +7,13 @@ import {
 import { ORDER_REPOSITORY } from '../../storage/storage.constants';
 import { IOrderRepository } from '../../storage/interfaces/order-repository.interface';
 import { OrderEntity, OrderStatusEnum } from './order.entity';
-import { OrderItemEntity } from './order-item.entity';
 import { CreateOrderDto } from './dto/create-order.dto';
 import {
   PortfolioService,
   PortfolioStockInput,
 } from '../portfolio/portfolio.service';
 import { MarketService } from '../market/market.service';
+import { OrderFactory } from './factories/order.factory';
 
 @Injectable()
 export class OrderService {
@@ -22,6 +22,7 @@ export class OrderService {
     private readonly orderRepository: IOrderRepository,
     private readonly portfolioService: PortfolioService,
     private readonly marketService: MarketService,
+    private readonly orderFactory: OrderFactory,
   ) {}
 
   /**
@@ -53,23 +54,14 @@ export class OrderService {
       ? OrderStatusEnum.EXECUTED
       : OrderStatusEnum.SCHEDULED;
 
-    // 3. Create Order Entity & Order Items
-    const orderItems = calculatedSplits.map((split) => {
-      const item = new OrderItemEntity();
-      item.ticker = split.ticker;
-      item.allocationPercentage = split.allocationPercentage;
-      item.pricePerShare = split.pricePerShare;
-      item.allocatedAmount = split.allocatedAmount;
-      item.shareQuantity = split.shareQuantity;
-      return item;
+    // 3. Create Order Entity & Order Items using OrderFactory & OrderBuilder
+    const order = this.orderFactory.createOrder({
+      orderType,
+      totalAmount,
+      scheduledExecutionDate,
+      status,
+      calculatedSplits,
     });
-
-    const order = new OrderEntity();
-    order.orderType = orderType;
-    order.totalAmount = totalAmount;
-    order.scheduledExecutionDate = scheduledExecutionDate;
-    order.status = status;
-    order.items = orderItems;
 
     // 4. Save and return historic order
     return this.orderRepository.save(order);

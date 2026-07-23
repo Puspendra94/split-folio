@@ -2,7 +2,7 @@
 
 This document provides detailed answers to the evaluation questions outlined in the **Ionixx Backend Developer Technical Challenge** specification.
 
-> 💡 **For a deep code and architectural walkthrough of core business logic (Pluggable Storage Abstraction, Ticker Deduplication, Non-Market Day Scheduling, Fractional Share Precision Math, Portfolio Weight Sync, and Request Validation), see the [README.md Technical Walkthrough](README.md#core-business-logic--technical-walkthrough).**
+> 💡 **For a deep code and architectural walkthrough of core business logic and design patterns (Pluggable Storage Abstraction, Strategy Pattern for Price Resolution, Order Builder & Factory Patterns, Ticker Deduplication, Non-Market Day Scheduling, Fractional Share Precision Math, Portfolio Weight Sync, and Request Validation), see the [README.md Technical Walkthrough](README.md#core-business-logic--technical-walkthrough).**
 
 ---
 

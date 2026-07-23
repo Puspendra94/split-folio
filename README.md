@@ -16,6 +16,7 @@
   - [4. Truncated Floor Precision Math for Fractional Shares](#4-truncated-floor-precision-math-for-fractional-shares)
   - [5. Portfolio Completion Status & Transactional Weight Sync](#5-portfolio-completion-status--transactional-weight-sync)
   - [6. Edge Payload Mutual Exclusion (`portfolio` vs `portfolioId`)](#6-edge-payload-mutual-exclusion-portfolio-vs-portfolioid)
+  - [7. Design Pattern Implementations](#7-design-pattern-implementations)
 - [Tech Stack & Dependencies](#tech-stack--dependencies)
 - [Getting Started](#getting-started)
   - [Prerequisites](#prerequisites)
@@ -296,6 +297,20 @@ portfolioId?: string;
 validationCheck?: boolean;
 ```
 If an invalid payload is sent, NestJS's global `ValidationPipe` immediately rejects it with `400 Bad Request`.
+
+---
+
+### 7. Design Pattern Implementations
+
+#### **A. Strategy Pattern for Stock Price Resolution (`IPriceResolutionStrategy`)**
+- **The Idea**: Decouple stock price resolution logic from services so live market feeds (e.g. Alpaca, Polygon.io) can be plugged in without mutating core service code.
+- **Implementation**: Defined `IPriceResolutionStrategy` interface (`src/modules/market/strategies/price-resolution.strategy.interface.ts`) and concrete `DefaultPriceResolutionStrategy`. Injected via dynamic provider token `PRICE_RESOLUTION_STRATEGY` into `MarketService`.
+
+#### **B. Factory & Builder Patterns for Order Creation (`OrderBuilder` & `OrderFactory`)**
+- **The Idea**: Encapsulate step-by-step construction of complex `OrderEntity` instances and their child `OrderItemEntity[]` items using a fluent builder interface and factory wrapper.
+- **Implementation**:
+  - `OrderBuilder` (`src/modules/order/builders/order.builder.ts`) provides fluent methods (`setOrderType()`, `setTotalAmount()`, `addItems()`, `build()`).
+  - `OrderFactory` (`src/modules/order/factories/order.factory.ts`) encapsulates entity construction and is injected directly into `OrderService`.
 
 ---
 
