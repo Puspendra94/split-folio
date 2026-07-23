@@ -28,9 +28,25 @@ export class PortfolioService {
     private readonly portfolioStockService: PortfolioStockService,
   ) {}
 
+  private deduplicatePortfolioInputs(
+    stocks: PortfolioStockInput[],
+  ): PortfolioStockInput[] {
+    if (!stocks || !Array.isArray(stocks)) return [];
+    const stockMap = new Map<string, PortfolioStockInput>();
+    for (const s of stocks) {
+      if (s && s.ticker) {
+        stockMap.set(s.ticker.trim().toUpperCase(), s);
+      }
+    }
+    return Array.from(stockMap.values());
+  }
+
   async create(dto: CreatePortfolioDto): Promise<PortfolioEntity> {
+    const deduplicatedStocks = this.deduplicatePortfolioInputs(
+      dto.stocks || [],
+    );
     const totalWeight = Number(
-      (dto.stocks || [])
+      deduplicatedStocks
         .reduce((sum, s) => sum + Number(s.allocationPercentage), 0)
         .toFixed(2),
     );
@@ -45,7 +61,7 @@ export class PortfolioService {
       name: dto.name || 'Model Portfolio',
       allocatedWeight: totalWeight,
       isComplete: Math.abs(totalWeight - 100) <= 0.01,
-      stocks: (dto.stocks || []).map((stock) => ({
+      stocks: deduplicatedStocks.map((stock) => ({
         ticker: stock.ticker.trim().toUpperCase(),
         allocationPercentage: stock.allocationPercentage,
         customMarketPrice: stock.customMarketPrice,
@@ -83,8 +99,11 @@ export class PortfolioService {
     }
 
     if (dto.stocks !== undefined) {
+      const deduplicatedStocks = this.deduplicatePortfolioInputs(
+        dto.stocks || [],
+      );
       const totalWeight = Number(
-        (dto.stocks || [])
+        deduplicatedStocks
           .reduce((sum, s) => sum + Number(s.allocationPercentage), 0)
           .toFixed(2),
       );
@@ -95,7 +114,7 @@ export class PortfolioService {
         );
       }
 
-      portfolio.stocks = (dto.stocks || []).map((stock) => ({
+      portfolio.stocks = deduplicatedStocks.map((stock) => ({
         ticker: stock.ticker.trim().toUpperCase(),
         allocationPercentage: stock.allocationPercentage,
         customMarketPrice: stock.customMarketPrice,
@@ -143,9 +162,10 @@ export class PortfolioService {
     totalAmount: number,
     precisionOverride?: number,
   ): CalculatedStockSplit[] {
-    this.validatePortfolioAllocations(stocks);
+    const deduplicatedStocks = this.deduplicatePortfolioInputs(stocks);
+    this.validatePortfolioAllocations(deduplicatedStocks);
 
-    return stocks.map((stock) =>
+    return deduplicatedStocks.map((stock) =>
       this.portfolioStockService.calculateStockSplit(
         stock.ticker,
         stock.allocationPercentage,

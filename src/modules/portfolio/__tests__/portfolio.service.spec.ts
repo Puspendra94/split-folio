@@ -245,6 +245,28 @@ describe('PortfolioService', () => {
       expect(result[1].allocatedAmount).toBe(40);
     });
 
+    it('should throw BadRequestException if null or invalid stocks array is provided to splitPortfolio', () => {
+      expect(() => service.splitPortfolio(null as any, 100)).toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('should deduplicate inline tickers keeping the last occurrence', () => {
+      const result = service.splitPortfolio(
+        [
+          { ticker: 'AAPL', allocationPercentage: 40 },
+          null as any,
+          { ticker: '', allocationPercentage: 10 } as any,
+          { ticker: 'AAPL', allocationPercentage: 100 },
+        ],
+        100,
+      );
+
+      expect(result).toHaveLength(1);
+      expect(result[0].ticker).toBe('AAPL');
+      expect(result[0].allocationPercentage).toBe(100);
+    });
+
     it('should split portfolio with precision override parameter', () => {
       const result = service.splitPortfolio(
         [{ ticker: 'AAPL', allocationPercentage: 100 }],

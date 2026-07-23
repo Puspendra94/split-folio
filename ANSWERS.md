@@ -33,6 +33,7 @@ In financial order management systems, data integrity and mathematical accuracy 
    - If an order is submitted during open market hours, its status is set to `EXECUTED`.
    - If an order is submitted outside trading hours or over the weekend (Saturday/Sunday), its status is set to `SCHEDULED` and assigned an execution timestamp for the next trading day at 09:00 UTC.
 4. **Portfolio Completion Status (`isComplete`)**: A saved model portfolio is marked `isComplete = true` only when its cumulative stock allocation percentage equals **100%**. Orders submitted via `portfolioId` require `isComplete = true`.
+5. **Batch Stock Deduplication**: If duplicate stock tickers are supplied within a single batch save payload (`POST /api/portfolios/:id/stocks/batch`), the last occurrence of the ticker is applied. Tickers are strictly deduplicated and unique per portfolio.
 
 ---
 
@@ -74,6 +75,6 @@ In financial order management systems, data integrity and mathematical accuracy 
 LLMs were utilized as an agentic pair-programmer throughout the development lifecycle:
 
 1. **Scaffolding Modular Architecture & Storage Abstraction**: Scaffolding NestJS module boilerplate, TypeORM configuration (`cli-rdbms.ts`), and the pluggable repository abstraction layer (`StorageModule`, `IPortfolioRepository`, `MemoryPortfolioRepository`).
-2. **Automated Unit Testing & 100% Coverage**: Generating comprehensive Jest unit tests covering edge cases in DTO validation, custom class-validator constraints, precision floor scaling, and in-memory map persistence, achieving 18 passed test suites (116 tests).
+2. **Automated Unit Testing & 100% Coverage**: Generating comprehensive Jest unit tests covering edge cases in DTO validation, custom class-validator constraints, precision floor scaling, and in-memory map persistence, achieving 18 passed test suites (139 tests).
 3. **TypeORM Migration Generation**: Assisting in drafting and executing TypeORM database migration scripts (`AddAllocatedWeightAndIsActiveForOrderToPortfolio` and `RenameIsActiveForOrderToIsCompleteInPortfolio`).
 4. **Postman Collection Structuring**: Generating the full Postman Collection JSON (`split-folio.postman_collection.json`) complete with test assertion scripts and collection variables (`baseUrl`, `portfolioId`, `stockId`, `orderId`) for rapid API testing.
