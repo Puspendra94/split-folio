@@ -3,6 +3,9 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { PORTFOLIO_REPOSITORY } from '../../../storage/storage.constants';
 import { PortfolioService } from '../portfolio.service';
 import { PortfolioStockService } from '../../portfolio-stock/portfolio-stock.service';
+import { NormalizeTickerStep } from '../pipeline/steps/normalize-ticker.step';
+import { DeduplicateStockStep } from '../pipeline/steps/deduplicate-stock.step';
+import { PortfolioProcessingPipeline } from '../pipeline/portfolio-processing.pipeline';
 
 describe('PortfolioService', () => {
   let service: PortfolioService;
@@ -41,6 +44,9 @@ describe('PortfolioService', () => {
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
+        NormalizeTickerStep,
+        DeduplicateStockStep,
+        PortfolioProcessingPipeline,
         PortfolioService,
         {
           provide: PORTFOLIO_REPOSITORY,

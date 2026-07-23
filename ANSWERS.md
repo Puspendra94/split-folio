@@ -2,7 +2,7 @@
 
 This document provides detailed answers to the evaluation questions outlined in the **Ionixx Backend Developer Technical Challenge** specification.
 
-> 💡 **For a deep code and architectural walkthrough of core business logic (Pluggable Storage Abstraction, Ticker Deduplication, Non-Market Day Scheduling, Fractional Share Precision Math, Portfolio Weight Sync, and Request Validation), see the [README.md Technical Walkthrough](README.md#core-business-logic--technical-walkthrough).**
+> 💡 **For a deep code and architectural walkthrough of core business logic and design patterns (Pluggable Storage Abstraction, Strategy Pattern for Price Resolution & Market Schedules, Order Builder & Factory Patterns, Portfolio Processing Pipeline, Ticker Deduplication, Fractional Share Math, and Request Validation), see the [README.md Technical Walkthrough](README.md#core-business-logic--technical-walkthrough).**
 
 ---
 
@@ -66,6 +66,7 @@ In financial order management systems, data integrity and mathematical accuracy 
 ### **B. Live Market Data & Execution**
 1. **Real-time Market Data Feeds**: Replace static/custom price resolution with streaming WebSocket / REST real-time market data providers (e.g., Alpaca, Polygon.io, or IEX Cloud) backed by a high-performance Redis cache.
 2. **Asynchronous Execution Queue**: Offload scheduled orders to a distributed job queue (e.g., **BullMQ** backed by Redis or AWS SQS). A cron worker triggers at market open (09:30 EST) to process queued orders asynchronously.
+3. **Observer / Event-Driven Architecture**: Implement an Observer / Event-Driven Pattern using `@nestjs/event-emitter` or a message broker (e.g., RabbitMQ, Kafka, or AWS SNS/SQS) to emit `OrderCreatedEvent` upon order completion. Downstream services (e.g., client notifications, rebalancing analytics, audit logs, and broker order routing) can listen and process events asynchronously without coupling to the primary order creation request path.
 
 ### **C. Observability & Reliability**
 1. **Centralized Logging & Distributed Tracing**: Export structured JSON logs to ELK / Datadog and instrument distributed tracing using **OpenTelemetry** and W3C trace contexts.
@@ -81,3 +82,4 @@ LLMs were utilized as an agentic pair-programmer throughout the development life
 2. **Automated Unit Testing & 100% Coverage**: Generating comprehensive Jest unit tests covering edge cases in DTO validation, custom class-validator constraints, precision floor scaling, and in-memory map persistence, achieving 18 passed test suites (141 tests).
 3. **TypeORM Migration Generation**: Assisting in drafting and executing TypeORM database migration scripts (`AddAllocatedWeightAndIsActiveForOrderToPortfolio` and `RenameIsActiveForOrderToIsCompleteInPortfolio`).
 4. **Postman Collection Structuring**: Generating the full Postman Collection JSON (`split-folio.postman_collection.json`) complete with test assertion scripts and collection variables (`baseUrl`, `portfolioId`, `stockId`, `orderId`) for rapid API testing.
+5. **Design Pattern Auditing**: Leveraging AI to audit the codebase for enterprise design patterns.

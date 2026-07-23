@@ -16,6 +16,7 @@
   - [4. Truncated Floor Precision Math for Fractional Shares](#4-truncated-floor-precision-math-for-fractional-shares)
   - [5. Portfolio Completion Status & Transactional Weight Sync](#5-portfolio-completion-status--transactional-weight-sync)
   - [6. Edge Payload Mutual Exclusion (`portfolio` vs `portfolioId`)](#6-edge-payload-mutual-exclusion-portfolio-vs-portfolioid)
+  - [7. Design Pattern Implementations](#7-design-pattern-implementations)
 - [Tech Stack & Dependencies](#tech-stack--dependencies)
 - [Getting Started](#getting-started)
   - [Prerequisites](#prerequisites)
@@ -296,6 +297,52 @@ portfolioId?: string;
 validationCheck?: boolean;
 ```
 If an invalid payload is sent, NestJS's global `ValidationPipe` immediately rejects it with `400 Bad Request`.
+
+---
+
+### 7. Design Pattern Implementations
+
+#### **A. Strategy Pattern for Stock Price Resolution (`IPriceResolutionStrategy`)**
+- **Pattern Used**: **Strategy Pattern**
+- **Where Used**: `src/modules/market/strategies/price-resolution.strategy.interface.ts`, `default-price-resolution.strategy.ts`, and `MarketService` (`src/modules/market/market.service.ts`).
+- **How Implemented**:
+  - `IPriceResolutionStrategy` interface defines `resolvePrice(ticker: string, customPrice?: number | null): number`.
+  - `DefaultPriceResolutionStrategy` implements the strategy, returning `customMarketPrice` if provided and positive, or falling back to `configService.defaultStockPrice`.
+  - Registered as a dynamic NestJS provider bound to injection token `PRICE_RESOLUTION_STRATEGY` in `MarketModule` and injected into `MarketService`.
+- **Why Implemented & Benefits**: Decouples price resolution logic from core market scheduling. In a production deployment, live WebSocket/REST data providers (e.g., Alpaca, Polygon.io, IEX Cloud) can be added as new strategy classes and swapped via configuration without altering `MarketService` or `OrderService`.
+
+#### **B. Strategy Pattern for Exchange Market Schedules (`IMarketScheduleStrategy`)**
+- **Pattern Used**: **Strategy Pattern**
+- **Where Used**: `src/modules/market/strategies/market-schedule.strategy.interface.ts`, `standard-equities-market-schedule.strategy.ts`, and `MarketService` (`src/modules/market/market.service.ts`).
+- **How Implemented**:
+  - `IMarketScheduleStrategy` interface defines `isMarketOpen(date?: Date): boolean` and `getNextMarketExecutionDate(date?: Date): Date`.
+  - `StandardEquitiesMarketScheduleStrategy` implements Monday–Friday 09:00–16:00 UTC market schedule logic.
+  - Bound to injection token `MARKET_SCHEDULE_STRATEGY` in `MarketModule` and injected into `MarketService`.
+- **Why Implemented & Benefits**: Decouples market calendar rules from business services. Enables seamless expansion to multi-asset exchanges (e.g., 24/7 Crypto exchanges or 24/5 Forex markets) simply by binding a different strategy implementation without modifying order execution logic.
+
+#### **C. Builder & Factory Patterns for Order Creation (`OrderBuilder` & `OrderFactory`)**
+- **Pattern Used**: **Builder Pattern & Factory Pattern**
+- **Where Used**: `OrderBuilder` (`src/modules/order/builders/order.builder.ts`), `OrderFactory` (`src/modules/order/factories/order.factory.ts`), and `OrderService` (`src/modules/order/order.service.ts`).
+- **How Implemented**:
+  - `OrderBuilder` provides a fluent interface (`setOrderType()`, `setTotalAmount()`, `setScheduledExecutionDate()`, `setStatus()`, `addItems()`, `build()`) to construct complex `OrderEntity` instances and child `OrderItemEntity[]` graphs.
+  - `OrderFactory` encapsulates object creation rules into `createOrder()`, injected directly into `OrderService`.
+- **Why Implemented & Benefits**: Eliminates long parameter constructors and manual entity mutation inside services. Protects entity invariants and ensures consistent order construction across the application, keeping `OrderService` clean and focused purely on workflow orchestration.
+
+#### **D. Chain of Responsibility / Pipeline Pattern for Portfolio Processing (`PortfolioProcessingPipeline`)**
+- **Pattern Used**: **Chain of Responsibility / Pipeline Pattern**
+- **Where Used**: `IPortfolioStep` (`src/modules/portfolio/pipeline/portfolio-step.interface.ts`), `NormalizeTickerStep`, `DeduplicateStockStep`, `PortfolioProcessingPipeline` (`src/modules/portfolio/pipeline/portfolio-processing.pipeline.ts`), and `PortfolioService` (`src/modules/portfolio/portfolio.service.ts`).
+- **How Implemented**:
+  - Independent pipeline steps (`NormalizeTickerStep` trims and uppercases tickers; `DeduplicateStockStep` keeps the last occurrence of duplicate tickers) implement `IPortfolioStep`.
+  - `PortfolioProcessingPipeline` chains these steps sequentially and executes them on raw portfolio stock arrays before validation and order calculation.
+- **Why Implemented & Benefits**: Adheres to the Single Responsibility Principle (SRP) and Open/Closed Principle (OCP). New preprocessing rules (e.g., restricted stock filtering, ESG compliance checks, or sector exposure caps) can be added as isolated pipeline steps without modifying `PortfolioService`.
+
+#### **E. Repository & Strategy Patterns for Pluggable Storage Abstraction (`StorageModule`)**
+- **Pattern Used**: **Repository Pattern & Strategy Pattern**
+- **Where Used**: `IPortfolioRepository`, `IPortfolioStockRepository`, `IOrderRepository` (`src/storage/interfaces/`), `StorageModule` (`src/storage/storage.module.ts`), `MemoryRepository` classes (`src/storage/memory/`), and `TypeOrmRepository` classes (`src/storage/typeorm/`).
+- **How Implemented**:
+  - Abstract repository interfaces define complete data access contracts.
+  - `StorageModule` inspects `STORAGE_DRIVER=inmemory|postgres` from `.env` at startup and dynamically binds either In-Memory JavaScript `Map` repositories or PostgreSQL TypeORM repositories to abstract injection tokens (`PORTFOLIO_REPOSITORY`, `ORDER_REPOSITORY`, etc.).
+- **Why Implemented & Benefits**: Complete decoupling of data persistence from application domain logic. Allows zero-dependency instant startup (`STORAGE_DRIVER=inmemory`) for testing and evaluation while supporting enterprise PostgreSQL production databases with zero code changes in controllers or services.
 
 ---
 

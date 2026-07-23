@@ -13,6 +13,7 @@ import {
 } from '../portfolio-stock/portfolio-stock.service';
 import { CreatePortfolioDto } from './dto/create-portfolio.dto';
 import { UpdatePortfolioDto } from './dto/update-portfolio.dto';
+import { PortfolioProcessingPipeline } from './pipeline/portfolio-processing.pipeline';
 
 export interface PortfolioStockInput {
   ticker: string;
@@ -26,19 +27,13 @@ export class PortfolioService {
     @Inject(PORTFOLIO_REPOSITORY)
     private readonly portfolioRepository: IPortfolioRepository,
     private readonly portfolioStockService: PortfolioStockService,
+    private readonly pipeline: PortfolioProcessingPipeline,
   ) {}
 
   private deduplicatePortfolioInputs(
     stocks: PortfolioStockInput[],
   ): PortfolioStockInput[] {
-    if (!stocks || !Array.isArray(stocks)) return [];
-    const stockMap = new Map<string, PortfolioStockInput>();
-    for (const s of stocks) {
-      if (s && s.ticker) {
-        stockMap.set(s.ticker.trim().toUpperCase(), s);
-      }
-    }
-    return Array.from(stockMap.values());
+    return this.pipeline.execute(stocks);
   }
 
   async create(dto: CreatePortfolioDto): Promise<PortfolioEntity> {
@@ -62,7 +57,7 @@ export class PortfolioService {
       allocatedWeight: totalWeight,
       isComplete: Math.abs(totalWeight - 100) <= 0.01,
       stocks: deduplicatedStocks.map((stock) => ({
-        ticker: stock.ticker.trim().toUpperCase(),
+        ticker: stock.ticker,
         allocationPercentage: stock.allocationPercentage,
         customMarketPrice: stock.customMarketPrice,
       })) as any,
@@ -115,7 +110,7 @@ export class PortfolioService {
       }
 
       portfolio.stocks = deduplicatedStocks.map((stock) => ({
-        ticker: stock.ticker.trim().toUpperCase(),
+        ticker: stock.ticker,
         allocationPercentage: stock.allocationPercentage,
         customMarketPrice: stock.customMarketPrice,
       })) as any;
