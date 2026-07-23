@@ -1,7 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  PORTFOLIO_STOCK_REPOSITORY,
+  PORTFOLIO_REPOSITORY,
+} from '../../../storage/storage.constants';
 import { PortfolioStockService } from '../portfolio-stock.service';
 import { PortfolioStockEntity } from '../portfolio-stock.entity';
 import { PortfolioEntity } from '../../portfolio/portfolio.entity';
@@ -56,16 +59,17 @@ describe('PortfolioStockService', () => {
       providers: [
         PortfolioStockService,
         {
-          provide: getRepositoryToken(PortfolioStockEntity),
+          provide: PORTFOLIO_STOCK_REPOSITORY,
           useValue: repository,
         },
         {
-          provide: getRepositoryToken(PortfolioEntity),
+          provide: PORTFOLIO_REPOSITORY,
           useValue: portfolioRepository,
         },
         {
           provide: DataSource,
           useValue: {
+            isInitialized: true,
             transaction: jest.fn().mockImplementation(async (cb) => {
               const manager = {
                 getRepository: (entity: any) => {
@@ -108,6 +112,17 @@ describe('PortfolioStockService', () => {
       expect(result.allocatedWeight).toBe(100);
       expect(result.isComplete).toBe(true);
     });
+
+    it('should handle sync when portfolio.stocks is null or undefined', async () => {
+      portfolioRepository.findOne.mockResolvedValue({
+        id: 'port-123',
+        stocks: null,
+      });
+
+      const result = await service.syncPortfolioWeightAndStatus('port-123');
+      expect(result.allocatedWeight).toBe(0);
+      expect(result.isComplete).toBe(false);
+    });
   });
 
   describe('batchUpsert', () => {
@@ -131,6 +146,48 @@ describe('PortfolioStockService', () => {
 
       const result = await service.batchUpsert('port-123', {
         stocks: [
+          { ticker: 'AAPL', allocationPercentage: 50, customMarketPrice: 150 },
+          { ticker: 'TSLA', allocationPercentage: 50 },
+        ],
+      });
+
+      expect(repository.save).toHaveBeenCalled();
+      expect(result.allocatedWeight).toBe(100);
+      expect(result.isComplete).toBe(true);
+    });
+
+    it('should batchUpsert when stock has falsy allocationPercentage (0)', async () => {
+      portfolioRepository.findOne.mockResolvedValue({
+        id: 'port-123',
+        stocks: [{ id: 'stock-123', ticker: 'AAPL', allocationPercentage: 0 }],
+      });
+
+      const result = await service.batchUpsert('port-123', {
+        stocks: [{ ticker: 'AAPL', allocationPercentage: 100 }],
+      });
+
+      expect(repository.save).toHaveBeenCalled();
+      expect(result.allocatedWeight).toBe(100);
+    });
+
+    it('should batchUpsert when dataSource is uninitialized or not provided (inmemory mode)', async () => {
+      const inMemoryService = new PortfolioStockService(
+        repository,
+        portfolioRepository,
+        { defaultStockPrice: 100, shareDecimalPrecision: 3 } as any,
+        undefined,
+      );
+
+      portfolioRepository.findOne.mockResolvedValue({
+        id: 'port-123',
+        stocks: [
+          { id: 'stock-123', ticker: 'AAPL', allocationPercentage: 60 },
+          { id: 'stock-456', ticker: 'TSLA', allocationPercentage: 40 },
+        ],
+      });
+
+      const result = await inMemoryService.batchUpsert('port-123', {
+        stocks: [
           { ticker: 'AAPL', allocationPercentage: 50 },
           { ticker: 'TSLA', allocationPercentage: 50 },
         ],
@@ -139,6 +196,25 @@ describe('PortfolioStockService', () => {
       expect(repository.save).toHaveBeenCalled();
       expect(result.allocatedWeight).toBe(100);
       expect(result.isComplete).toBe(true);
+    });
+
+    it('should handle batchUpsert when portfolio.stocks is null', async () => {
+      portfolioRepository.findOne
+        .mockResolvedValueOnce({
+          id: 'port-123',
+          stocks: null,
+        })
+        .mockResolvedValueOnce({
+          id: 'port-123',
+          stocks: [{ ticker: 'AAPL', allocationPercentage: 100 }],
+        });
+
+      const result = await service.batchUpsert('port-123', {
+        stocks: [{ ticker: 'AAPL', allocationPercentage: 100 }],
+      });
+
+      expect(repository.save).toHaveBeenCalled();
+      expect(result.allocatedWeight).toBe(100);
     });
 
     it('should throw BadRequestException if merged total weight > 100%', async () => {
@@ -180,6 +256,17 @@ describe('PortfolioStockService', () => {
 
       expect(repository.create).toHaveBeenCalled();
       expect(repository.save).toHaveBeenCalled();
+      expect(result.id).toBe('stock-123');
+    });
+
+    it('should handle create when portfolio.stocks is null', async () => {
+      portfolioRepository.findOne.mockResolvedValue({
+        id: 'port-123',
+        stocks: null,
+      });
+
+      const dto = { ticker: 'AAPL', allocationPercentage: 100 };
+      const result = await service.create('port-123', dto);
       expect(result.id).toBe('stock-123');
     });
 
@@ -258,6 +345,22 @@ describe('PortfolioStockService', () => {
       expect(result.allocationPercentage).toBe(50);
     });
 
+    it('should update stock when allocationPercentage is omitted', async () => {
+      repository.findOne.mockResolvedValue({
+        id: 'stock-123',
+        ticker: 'AAPL',
+        customMarketPrice: 100,
+        portfolio: { id: 'port-123' },
+      });
+
+      const result = await service.update('stock-123', {
+        customMarketPrice: 150,
+      });
+
+      expect(repository.save).toHaveBeenCalled();
+      expect(result.customMarketPrice).toBe(150);
+    });
+
     it('should update stock when portfolio relation is not loaded', async () => {
       repository.findOne.mockResolvedValue({
         id: 'stock-123',
@@ -297,6 +400,17 @@ describe('PortfolioStockService', () => {
       });
       const result = await service.remove('stock-123');
 
+      expect(repository.remove).toHaveBeenCalled();
+      expect(result.message).toContain('successfully deleted');
+    });
+
+    it('should remove stock when portfolio relation is null or undefined', async () => {
+      repository.findOne.mockResolvedValue({
+        id: 'stock-standalone',
+        portfolio: null,
+      });
+
+      const result = await service.remove('stock-standalone');
       expect(repository.remove).toHaveBeenCalled();
       expect(result.message).toContain('successfully deleted');
     });

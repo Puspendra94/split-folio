@@ -1,16 +1,23 @@
 import {
   Injectable,
+  Inject,
   NotFoundException,
   BadRequestException,
+  Optional,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, EntityManager } from 'typeorm';
+import { DataSource } from 'typeorm';
+import {
+  PORTFOLIO_STOCK_REPOSITORY,
+  PORTFOLIO_REPOSITORY,
+} from '../../storage/storage.constants';
+import { IPortfolioStockRepository } from '../../storage/interfaces/portfolio-stock-repository.interface';
+import { IPortfolioRepository } from '../../storage/interfaces/portfolio-repository.interface';
 import { PortfolioStockEntity } from './portfolio-stock.entity';
 import { PortfolioEntity } from '../portfolio/portfolio.entity';
-import { ApiConfigService } from '../../shared/services/config.service';
 import { CreatePortfolioStockDto } from './dto/create-portfolio-stock.dto';
 import { UpdatePortfolioStockDto } from './dto/update-portfolio-stock.dto';
 import { BatchUpsertStocksDto } from './dto/batch-upsert-stocks.dto';
+import { ApiConfigService } from '../../shared/services/config.service';
 
 export interface CalculatedStockSplit {
   ticker: string;
@@ -18,32 +25,30 @@ export interface CalculatedStockSplit {
   pricePerShare: number;
   allocatedAmount: number;
   shareQuantity: number;
+  precision: number;
 }
 
 @Injectable()
 export class PortfolioStockService {
   constructor(
-    @InjectRepository(PortfolioStockEntity)
-    private readonly portfolioStockRepository: Repository<PortfolioStockEntity>,
-    @InjectRepository(PortfolioEntity)
-    private readonly portfolioRepository: Repository<PortfolioEntity>,
-    private readonly dataSource: DataSource,
+    @Inject(PORTFOLIO_STOCK_REPOSITORY)
+    private readonly portfolioStockRepository: IPortfolioStockRepository,
+    @Inject(PORTFOLIO_REPOSITORY)
+    private readonly portfolioRepository: IPortfolioRepository,
     private readonly configService: ApiConfigService,
+    @Optional()
+    private readonly dataSource?: DataSource,
   ) {}
 
   /**
-   * Recalculates and updates portfolio's allocatedWeight and isComplete status based on saved database stocks.
-   * Can accept an optional transactional EntityManager to participate in an ongoing transaction.
+   * Recalculates total allocated weight for a portfolio and updates its completion status.
    */
   async syncPortfolioWeightAndStatus(
     portfolioId: string,
-    manager?: EntityManager,
+    customPortfolioRepo?: IPortfolioRepository,
   ): Promise<PortfolioEntity> {
-    const portfolioRepo = manager
-      ? manager.getRepository(PortfolioEntity)
-      : this.portfolioRepository;
-
-    const portfolio = await portfolioRepo.findOne({
+    const repo = customPortfolioRepo || this.portfolioRepository;
+    const portfolio = await repo.findOne({
       where: { id: portfolioId },
       relations: ['stocks'],
     });
@@ -54,8 +59,9 @@ export class PortfolioStockService {
       );
     }
 
+    const stocks = portfolio.stocks || [];
     const totalWeight = Number(
-      (portfolio.stocks || [])
+      stocks
         .reduce((sum, s) => sum + Number(s.allocationPercentage), 0)
         .toFixed(2),
     );
@@ -63,25 +69,20 @@ export class PortfolioStockService {
     portfolio.allocatedWeight = totalWeight;
     portfolio.isComplete = Math.abs(totalWeight - 100) <= 0.01;
 
-    return portfolioRepo.save(portfolio);
+    return repo.save(portfolio);
   }
 
   /**
-   * Batch upserts stock records for a portfolio within an atomic database transaction.
-   * Fetches existing stocks, merges with incoming stocks (existing.merge(new)),
-   * validates total weight <= 100, batch saves stocks, and updates portfolio weight & status.
-   * If any step fails, the entire transaction rolls back cleanly.
+   * Batch upserts (creates or updates) multiple stocks in a model portfolio.
    */
   async batchUpsert(
     portfolioId: string,
     dto: BatchUpsertStocksDto,
   ): Promise<PortfolioEntity> {
-    return this.dataSource.transaction(async (transactionalEntityManager) => {
-      const portfolioRepo =
-        transactionalEntityManager.getRepository(PortfolioEntity);
-      const stockRepo =
-        transactionalEntityManager.getRepository(PortfolioStockEntity);
-
+    const executeUpsert = async (
+      portfolioRepo: IPortfolioRepository,
+      stockRepo: IPortfolioStockRepository,
+    ) => {
       const portfolio = await portfolioRepo.findOne({
         where: { id: portfolioId },
         relations: ['stocks'],
@@ -102,21 +103,21 @@ export class PortfolioStockService {
 
       const stocksToSave: PortfolioStockEntity[] = [];
 
-      for (const incoming of dto.stocks) {
-        const tickerKey = incoming.ticker.trim().toUpperCase();
-        const existing = stockMap.get(tickerKey);
+      for (const item of dto.stocks) {
+        const tickerKey = item.ticker.trim().toUpperCase();
+        const existingStock = stockMap.get(tickerKey);
 
-        if (existing) {
-          // Merge/Replace existing stock values with incoming values
-          existing.allocationPercentage = incoming.allocationPercentage;
-          existing.customMarketPrice = incoming.customMarketPrice;
-          stocksToSave.push(existing);
+        if (existingStock) {
+          existingStock.allocationPercentage = item.allocationPercentage;
+          if (item.customMarketPrice !== undefined) {
+            existingStock.customMarketPrice = item.customMarketPrice;
+          }
+          stocksToSave.push(existingStock);
         } else {
-          // Create new stock record
           const newStock = stockRepo.create({
             ticker: tickerKey,
-            allocationPercentage: incoming.allocationPercentage,
-            customMarketPrice: incoming.customMarketPrice,
+            allocationPercentage: item.allocationPercentage,
+            customMarketPrice: item.customMarketPrice,
             portfolio: { id: portfolioId } as any,
           });
           stockMap.set(tickerKey, newStock);
@@ -124,11 +125,10 @@ export class PortfolioStockService {
         }
       }
 
-      // Calculate total weight of all stocks in portfolio (merged set)
       const allMergedStocks = Array.from(stockMap.values());
       const totalWeight = Number(
         allMergedStocks
-          .reduce((sum, s) => sum + Number(s.allocationPercentage || 0), 0)
+          .reduce((sum, s) => sum + Number(s.allocationPercentage), 0)
           .toFixed(2),
       );
 
@@ -138,15 +138,23 @@ export class PortfolioStockService {
         );
       }
 
-      // 1. Batch save stock records inside transaction
       await stockRepo.save(stocksToSave);
+      return this.syncPortfolioWeightAndStatus(portfolioId, portfolioRepo);
+    };
 
-      // 2. Sync portfolio allocatedWeight and isComplete status inside the same transaction
-      return this.syncPortfolioWeightAndStatus(
-        portfolioId,
-        transactionalEntityManager,
-      );
-    });
+    if (this.dataSource && this.dataSource.isInitialized) {
+      return this.dataSource.transaction(async (manager) => {
+        return executeUpsert(
+          manager.getRepository(PortfolioEntity) as any,
+          manager.getRepository(PortfolioStockEntity) as any,
+        );
+      });
+    }
+
+    return executeUpsert(
+      this.portfolioRepository,
+      this.portfolioStockRepository,
+    );
   }
 
   async create(
@@ -174,7 +182,6 @@ export class PortfolioStockService {
     let otherStocksTotal = 0;
 
     if (existingStock) {
-      // Upsert existing stock record
       existingStock.allocationPercentage = dto.allocationPercentage;
       existingStock.customMarketPrice = dto.customMarketPrice;
       stockToSave = existingStock;
@@ -183,7 +190,6 @@ export class PortfolioStockService {
         .filter((s) => s.id !== existingStock.id)
         .reduce((sum, s) => sum + Number(s.allocationPercentage), 0);
     } else {
-      // New stock record
       stockToSave = this.portfolioStockRepository.create({
         ticker: tickerKey,
         allocationPercentage: dto.allocationPercentage,
@@ -207,7 +213,10 @@ export class PortfolioStockService {
       );
     }
 
-    const savedStock = await this.portfolioStockRepository.save(stockToSave);
+    const savedStock = (await this.portfolioStockRepository.save(
+      stockToSave,
+    )) as PortfolioStockEntity;
+
     await this.syncPortfolioWeightAndStatus(portfolioId);
     return savedStock;
   }
@@ -257,16 +266,22 @@ export class PortfolioStockService {
           );
         }
       }
+      stock.allocationPercentage = dto.allocationPercentage;
     }
 
-    Object.assign(stock, dto);
-    const updatedStock = await this.portfolioStockRepository.save(stock);
+    if (dto.customMarketPrice !== undefined) {
+      stock.customMarketPrice = dto.customMarketPrice;
+    }
+
+    const savedStock = (await this.portfolioStockRepository.save(
+      stock,
+    )) as PortfolioStockEntity;
 
     if (stock.portfolio?.id) {
       await this.syncPortfolioWeightAndStatus(stock.portfolio.id);
     }
 
-    return updatedStock;
+    return savedStock;
   }
 
   async remove(id: string): Promise<{ message: string }> {
@@ -283,23 +298,17 @@ export class PortfolioStockService {
   }
 
   /**
-   * Resolves price per share for a stock.
-   * Uses custom market price if provided and > 0, otherwise defaults to $100.
+   * Resolves the market price for a given stock ticker.
    */
   resolveStockPrice(ticker: string, customMarketPrice?: number | null): number {
-    if (
-      customMarketPrice !== undefined &&
-      customMarketPrice !== null &&
-      !isNaN(customMarketPrice) &&
-      customMarketPrice > 0
-    ) {
+    if (customMarketPrice !== undefined && customMarketPrice !== null) {
       return Number(customMarketPrice);
     }
     return this.configService.defaultStockPrice;
   }
 
   /**
-   * Calculates the split amount and share quantity for an individual stock.
+   * Calculates investment allocation and share quantities for a single stock.
    */
   calculateStockSplit(
     ticker: string,
@@ -309,23 +318,25 @@ export class PortfolioStockService {
     precisionOverride?: number,
   ): CalculatedStockSplit {
     const pricePerShare = this.resolveStockPrice(ticker, customMarketPrice);
-    const allocatedAmount = totalAmount * (allocationPercentage / 100);
-    const rawQuantity = allocatedAmount / pricePerShare;
+    const allocatedAmount = Number(
+      (totalAmount * (allocationPercentage / 100)).toFixed(2),
+    );
 
     const precision =
       precisionOverride !== undefined
         ? precisionOverride
         : this.configService.shareDecimalPrecision;
 
-    const factor = Math.pow(10, precision);
-    const shareQuantity = Math.floor(rawQuantity * factor) / factor;
+    const rawShares = allocatedAmount / pricePerShare;
+    const shareQuantity = Number(rawShares.toFixed(precision));
 
     return {
-      ticker,
+      ticker: ticker.trim().toUpperCase(),
       allocationPercentage,
-      pricePerShare: Number(pricePerShare.toFixed(2)),
-      allocatedAmount: Number(allocatedAmount.toFixed(2)),
+      pricePerShare,
+      allocatedAmount,
       shareQuantity,
+      precision,
     };
   }
 }

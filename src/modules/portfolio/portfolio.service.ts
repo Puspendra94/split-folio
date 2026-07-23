@@ -1,10 +1,11 @@
 import {
   Injectable,
+  Inject,
   BadRequestException,
   NotFoundException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { PORTFOLIO_REPOSITORY } from '../../storage/storage.constants';
+import { IPortfolioRepository } from '../../storage/interfaces/portfolio-repository.interface';
 import { PortfolioEntity } from './portfolio.entity';
 import {
   PortfolioStockService,
@@ -22,8 +23,8 @@ export interface PortfolioStockInput {
 @Injectable()
 export class PortfolioService {
   constructor(
-    @InjectRepository(PortfolioEntity)
-    private readonly portfolioRepository: Repository<PortfolioEntity>,
+    @Inject(PORTFOLIO_REPOSITORY)
+    private readonly portfolioRepository: IPortfolioRepository,
     private readonly portfolioStockService: PortfolioStockService,
   ) {}
 
@@ -48,7 +49,7 @@ export class PortfolioService {
         ticker: stock.ticker.trim().toUpperCase(),
         allocationPercentage: stock.allocationPercentage,
         customMarketPrice: stock.customMarketPrice,
-      })),
+      })) as any,
     });
 
     return this.portfolioRepository.save(portfolio);
@@ -94,7 +95,7 @@ export class PortfolioService {
         );
       }
 
-      portfolio.stocks = dto.stocks.map((stock) => ({
+      portfolio.stocks = (dto.stocks || []).map((stock) => ({
         ticker: stock.ticker.trim().toUpperCase(),
         allocationPercentage: stock.allocationPercentage,
         customMarketPrice: stock.customMarketPrice,

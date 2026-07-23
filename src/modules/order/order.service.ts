@@ -1,10 +1,11 @@
 import {
   Injectable,
+  Inject,
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { ORDER_REPOSITORY } from '../../storage/storage.constants';
+import { IOrderRepository } from '../../storage/interfaces/order-repository.interface';
 import { OrderEntity, OrderStatusEnum } from './order.entity';
 import { OrderItemEntity } from './order-item.entity';
 import { CreateOrderDto } from './dto/create-order.dto';
@@ -17,10 +18,8 @@ import { MarketService } from '../market/market.service';
 @Injectable()
 export class OrderService {
   constructor(
-    @InjectRepository(OrderEntity)
-    private readonly orderRepository: Repository<OrderEntity>,
-    @InjectRepository(OrderItemEntity)
-    private readonly orderItemRepository: Repository<OrderItemEntity>,
+    @Inject(ORDER_REPOSITORY)
+    private readonly orderRepository: IOrderRepository,
     private readonly portfolioService: PortfolioService,
     private readonly marketService: MarketService,
   ) {}

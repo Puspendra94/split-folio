@@ -1,4 +1,4 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Optional } from '@nestjs/common';
 import {
   HealthCheck,
   HealthCheckResult,
@@ -10,14 +10,25 @@ import {
 export class HealthController {
   constructor(
     private readonly healthCheck: HealthCheckService,
-    private readonly typeOrmHealthIndicator: TypeOrmHealthIndicator,
+    @Optional()
+    private readonly typeOrmHealthIndicator?: TypeOrmHealthIndicator,
   ) {}
 
   @Get()
   @HealthCheck()
   public async checkHealth(): Promise<HealthCheckResult> {
+    const isPostgres = process.env.STORAGE_DRIVER?.toLowerCase() === 'postgres';
+
+    if (isPostgres && this.typeOrmHealthIndicator) {
+      return this.healthCheck.check([
+        () => this.typeOrmHealthIndicator!.pingCheck('postgres'),
+      ]);
+    }
+
     return this.healthCheck.check([
-      () => this.typeOrmHealthIndicator.pingCheck('postgres'),
+      async () => ({
+        storage: { status: 'up', driver: 'inmemory' },
+      }),
     ]);
   }
 }

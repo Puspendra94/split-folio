@@ -8,12 +8,13 @@
 
 - [Overview](#overview)
 - [Key Features](#key-features)
+- [Pluggable Storage Drivers](#pluggable-storage-drivers)
 - [Tech Stack & Dependencies](#tech-stack--dependencies)
 - [Getting Started](#getting-started)
   - [Prerequisites](#prerequisites)
   - [Installation](#installation)
   - [Environment Configuration](#environment-configuration)
-  - [Database Setup & Migrations](#database-setup--migrations)
+  - [Database Setup & Migrations (Optional)](#database-setup--migrations-optional)
   - [Running the Application](#running-the-application)
   - [Running Tests & Coverage](#running-tests--coverage)
 - [API Documentation & Examples](#api-documentation--examples)
@@ -39,15 +40,37 @@
 
 ## Key Features
 
+- **Pluggable Storage Abstraction**: Instantly switch between In-Memory Map storage (zero DB required) and PostgreSQL via `STORAGE_DRIVER` env variable.
 - **Model Portfolio Order Splitting**: Supports `BUY` and `SELL` order types.
 - **Flexible Portfolio Input**: Accepts either an inline `portfolio` array or a saved `portfolioId` from the database.
 - **Strict Weightage Validation**: Enforces exact 100% total portfolio allocation weight checks and tracks portfolio completion status (`isComplete`).
-- **Configurable Share Precision**: Global configuration for share quantity decimal precision (default: 3 decimal places) with per-request override options (up to 7 decimal places).
+- **Configurable Share Precision**: Global configuration for share quantity decimal precision (`SHARE_DECIMAL_PRECISION=3`) with per-request override options (up to 7 decimal places).
+- **Default & Custom Pricing**: Default stock price of $100 per share (`DEFAULT_STOCK_PRICE=100`) while honoring custom market price overrides provided by partners.
 - **Market Schedule Intelligence**: Automatically schedules orders placed outside market hours or on weekends for the next valid market trading day (Monday–Friday 09:00 UTC).
-- **Custom Price Overrides**: Defaults stock prices to $100 per share while honoring custom market price overrides provided by partners.
-- **Atomic Database Transactions**: Wraps batch stock upserts and portfolio updates in TypeORM transactions to prevent inconsistent state.
+- **Transactional Consistency**: Handles batch stock upserts and portfolio updates atomically across both in-memory map operations and PostgreSQL transactions.
 - **Console Performance Logging**: Instruments and logs request execution duration in milliseconds for every API invocation (`[POST] /api/orders/split 201 - 14ms`).
-- **100% Test Coverage**: Fully covered by 16 Jest test suites (107 tests) with 100% statement and line coverage.
+- **100% Test Coverage**: Fully covered by 18 Jest test suites (116 tests).
+
+---
+
+## Pluggable Storage Drivers
+
+SplitFolio features a **Pluggable Storage Abstraction Layer** allowing you to dynamically toggle the persistence driver via environment variables without touching any business logic:
+
+1. **In-Memory Mode (Default)**:
+   ```env
+   STORAGE_DRIVER=inmemory
+   ```
+   - Operates 100% in-memory using JavaScript `Map` data structures.
+   - **Zero external database dependencies required** (satisfies technical assessment requirement *"Data should not survive application restart"*).
+   - Starts instantly out-of-the-box.
+
+2. **PostgreSQL RDBMS Mode**:
+   ```env
+   STORAGE_DRIVER=postgres
+   ```
+   - Connects to a live PostgreSQL database via TypeORM.
+   - Performs schema migrations (`npm run migration:run`) and enforces database foreign key constraints.
 
 ---
 
@@ -55,7 +78,7 @@
 
 - **Framework**: [NestJS](https://nestjs.com/) (v11)
 - **Language**: TypeScript (v5)
-- **Database / ORM**: PostgreSQL (v14+) & [TypeORM](https://typeorm.io/) (v0.3)
+- **Storage / ORM**: Pluggable In-Memory Repository Driver & PostgreSQL / [TypeORM](https://typeorm.io/) (v0.3)
 - **DTO Validation & Transformation**: `class-validator` & `class-transformer`
 - **Health Checks**: `@nestjs/terminus`
 - **Testing**: Jest (v29)
@@ -69,7 +92,6 @@
 
 - **Node.js**: v18 or later
 - **npm**: v9 or later
-- **PostgreSQL**: Running instance (v14+)
 
 ### Installation
 
@@ -94,22 +116,27 @@ Default `.env` configuration:
 ```env
 PORT=3001
 NODE_ENV=development
+APP_NAME=split-folio
 
-# Database Configuration
-POSTGRES_HOST=localhost
-POSTGRES_PORT=5432
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=postgres
-POSTGRES_DB=split_folio
+# Storage Driver Selection: inmemory (default, zero DB required) | postgres
+STORAGE_DRIVER=inmemory
 
 # Application Logic Defaults
 DEFAULT_STOCK_PRICE=100
 SHARE_DECIMAL_PRECISION=3
+
+# Database Configuration (Required only when STORAGE_DRIVER=postgres)
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postgres
+POSTGRES_DB=postgres
+POSTGRES_SCHEMA=split_folio
 ```
 
-### Database Setup & Migrations
+### Database Setup & Migrations (Optional)
 
-Create the database schema and run database migrations:
+If running in `STORAGE_DRIVER=postgres` mode:
 
 ```bash
 # Create database schema
@@ -284,7 +311,7 @@ curl -X GET http://localhost:3001/api/portfolios
 
 #### **Batch Upsert Stocks (`POST /api/portfolios/:id/stocks/batch`)**
 
-Merges existing portfolio stock records with new incoming stocks (overriding existing allocations by ticker), validates total weight $\le 100\%$, batch inserts/updates within a transaction, and syncs `allocatedWeight` and `isComplete`.
+Merges existing portfolio stock records with new incoming stocks (overriding existing allocations by ticker), validates total weight $\le 100\%$, batch inserts/updates, and syncs `allocatedWeight` and `isComplete`.
 
 ```bash
 curl -X POST http://localhost:3001/api/portfolios/bf543d76-7da4-4eb4-a317-6e3e7c9e69ef/stocks/batch \
@@ -310,9 +337,9 @@ curl -X GET http://localhost:3001/api/health
 ```json
 {
   "status": "ok",
-  "info": { "database": { "status": "up" } },
+  "info": { "storage": { "status": "up", "driver": "inmemory" } },
   "error": {},
-  "details": { "database": { "status": "up" } }
+  "details": { "storage": { "status": "up", "driver": "inmemory" } }
 }
 ```
 
@@ -347,7 +374,7 @@ src/
 │   └── logging.interceptor.ts       # Console performance response time interceptor
 ├── migrations/                      # Version-controlled database migrations
 ├── modules/
-│   ├── health/                      # Terminus database health check
+│   ├── health/                      # Terminus storage health check
 │   ├── market/                      # Trading day calculation & market open logic
 │   ├── order/                       # Split order creation & historic order querying
 │   ├── portfolio/                   # Model portfolio CRUD & weight management
@@ -355,6 +382,12 @@ src/
 ├── shared/
 │   └── services/
 │       └── config.service.ts        # App configuration & default settings
+├── storage/                         # Pluggable Storage Abstraction Layer
+│   ├── interfaces/                  # Abstract repository interfaces
+│   ├── memory/                      # In-Memory JavaScript Map repository implementation
+│   ├── typeorm/                     # PostgreSQL TypeORM repository implementation
+│   ├── storage.constants.ts         # Injection tokens (PORTFOLIO_REPOSITORY, etc.)
+│   └── storage.module.ts            # Global storage module selecting driver via env
 ├── main.ts                          # Application entry point
 └── snake-naming.strategy.ts         # TypeORM snake_case database naming strategy
 ```

@@ -5,6 +5,7 @@ import { HealthController } from '../health.controller';
 describe('HealthController', () => {
   let controller: HealthController;
   let healthCheckService: HealthCheckService;
+  let typeOrmIndicator: TypeOrmHealthIndicator;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -13,14 +14,16 @@ describe('HealthController', () => {
         {
           provide: HealthCheckService,
           useValue: {
-            check: jest.fn().mockImplementation((indicators) => {
-              indicators.forEach((fn: any) => fn());
-              return Promise.resolve({
+            check: jest.fn().mockImplementation(async (indicators) => {
+              for (const fn of indicators) {
+                await fn();
+              }
+              return {
                 status: 'ok',
-                info: { postgres: { status: 'up' } },
+                info: { storage: { status: 'up' } },
                 error: {},
-                details: { postgres: { status: 'up' } },
-              });
+                details: { storage: { status: 'up' } },
+              };
             }),
           },
         },
@@ -37,15 +40,27 @@ describe('HealthController', () => {
 
     controller = module.get<HealthController>(HealthController);
     healthCheckService = module.get<HealthCheckService>(HealthCheckService);
+    typeOrmIndicator = module.get<TypeOrmHealthIndicator>(
+      TypeOrmHealthIndicator,
+    );
   });
 
   it('should be defined', () => {
     expect(controller).toBeDefined();
   });
 
-  it('should return health check result', async () => {
+  it('should return inmemory health check result by default', async () => {
+    delete process.env.STORAGE_DRIVER;
     const result = await controller.checkHealth();
     expect(result.status).toBe('ok');
     expect(healthCheckService.check).toHaveBeenCalled();
+  });
+
+  it('should ping postgres if STORAGE_DRIVER=postgres', async () => {
+    process.env.STORAGE_DRIVER = 'postgres';
+    const result = await controller.checkHealth();
+    expect(result.status).toBe('ok');
+    expect(typeOrmIndicator.pingCheck).toHaveBeenCalledWith('postgres');
+    delete process.env.STORAGE_DRIVER;
   });
 });
