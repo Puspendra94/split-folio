@@ -1,8 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { MarketService } from '../market.service';
 import { ApiConfigService } from '../../../shared/services/config.service';
-import { PRICE_RESOLUTION_STRATEGY } from '../market.constants';
+import {
+  PRICE_RESOLUTION_STRATEGY,
+  MARKET_SCHEDULE_STRATEGY,
+} from '../market.constants';
 import { DefaultPriceResolutionStrategy } from '../strategies/default-price-resolution.strategy';
+import { StandardEquitiesMarketScheduleStrategy } from '../strategies/standard-equities-market-schedule.strategy';
 
 describe('MarketService', () => {
   let service: MarketService;
@@ -13,9 +17,14 @@ describe('MarketService', () => {
       providers: [
         MarketService,
         DefaultPriceResolutionStrategy,
+        StandardEquitiesMarketScheduleStrategy,
         {
           provide: PRICE_RESOLUTION_STRATEGY,
           useClass: DefaultPriceResolutionStrategy,
+        },
+        {
+          provide: MARKET_SCHEDULE_STRATEGY,
+          useClass: StandardEquitiesMarketScheduleStrategy,
         },
         {
           provide: ApiConfigService,

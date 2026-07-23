@@ -306,11 +306,19 @@ If an invalid payload is sent, NestJS's global `ValidationPipe` immediately reje
 - **The Idea**: Decouple stock price resolution logic from services so live market feeds (e.g. Alpaca, Polygon.io) can be plugged in without mutating core service code.
 - **Implementation**: Defined `IPriceResolutionStrategy` interface (`src/modules/market/strategies/price-resolution.strategy.interface.ts`) and concrete `DefaultPriceResolutionStrategy`. Injected via dynamic provider token `PRICE_RESOLUTION_STRATEGY` into `MarketService`.
 
-#### **B. Factory & Builder Patterns for Order Creation (`OrderBuilder` & `OrderFactory`)**
+#### **B. Strategy Pattern for Exchange Market Schedules (`IMarketScheduleStrategy`)**
+- **The Idea**: Decouple market operating schedule and execution date calculations from `MarketService` to support multi-exchange schedules (e.g. 24x7 Crypto, 24x5 Forex, or standard equities).
+- **Implementation**: Defined `IMarketScheduleStrategy` interface (`src/modules/market/strategies/market-schedule.strategy.interface.ts`) and concrete `StandardEquitiesMarketScheduleStrategy`. Injected via dynamic provider token `MARKET_SCHEDULE_STRATEGY` into `MarketService`.
+
+#### **C. Factory & Builder Patterns for Order Creation (`OrderBuilder` & `OrderFactory`)**
 - **The Idea**: Encapsulate step-by-step construction of complex `OrderEntity` instances and their child `OrderItemEntity[]` items using a fluent builder interface and factory wrapper.
 - **Implementation**:
   - `OrderBuilder` (`src/modules/order/builders/order.builder.ts`) provides fluent methods (`setOrderType()`, `setTotalAmount()`, `addItems()`, `build()`).
   - `OrderFactory` (`src/modules/order/factories/order.factory.ts`) encapsulates entity construction and is injected directly into `OrderService`.
+
+#### **D. Chain of Responsibility / Pipeline Pattern for Portfolio Processing (`PortfolioProcessingPipeline`)**
+- **The Idea**: Encapsulate portfolio input transformation and validation steps into an extensible, sequential pipeline.
+- **Implementation**: Defined `IPortfolioStep` interface (`src/modules/portfolio/pipeline/portfolio-step.interface.ts`), `NormalizeTickerStep`, and `DeduplicateStockStep`. `PortfolioProcessingPipeline` chains these steps sequentially before validation and order splitting.
 
 ---
 

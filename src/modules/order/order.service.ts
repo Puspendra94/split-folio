@@ -63,7 +63,7 @@ export class OrderService {
       calculatedSplits,
     });
 
-    // 4. Save and return historic order
+    // 4. Save historic order
     return this.orderRepository.save(order);
   }
 
