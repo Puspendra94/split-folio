@@ -1,8 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { getRepositoryToken } from '@nestjs/typeorm';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { PORTFOLIO_REPOSITORY } from '../../../storage/storage.constants';
 import { PortfolioService } from '../portfolio.service';
-import { PortfolioEntity } from '../portfolio.entity';
 import { PortfolioStockService } from '../../portfolio-stock/portfolio-stock.service';
 
 describe('PortfolioService', () => {
@@ -44,7 +43,7 @@ describe('PortfolioService', () => {
       providers: [
         PortfolioService,
         {
-          provide: getRepositoryToken(PortfolioEntity),
+          provide: PORTFOLIO_REPOSITORY,
           useValue: repository,
         },
         {
@@ -77,6 +76,14 @@ describe('PortfolioService', () => {
       expect(result.id).toBe('port-123');
       expect(result.allocatedWeight).toBe(100);
       expect(result.isComplete).toBe(true);
+    });
+
+    it('should create portfolio when stocks is undefined or empty', async () => {
+      const dto = { name: 'Empty Portfolio' };
+
+      const result = await service.create(dto as any);
+      expect(result.allocatedWeight).toBe(0);
+      expect(result.isComplete).toBe(false);
     });
 
     it('should set isComplete to false if allocatedWeight < 100%', async () => {
@@ -148,6 +155,17 @@ describe('PortfolioService', () => {
       expect(result.name).toBe('Tech Dividend');
       expect(result.allocatedWeight).toBe(100);
       expect(result.isComplete).toBe(true);
+    });
+
+    it('should update portfolio when stocks is provided as empty array or null', async () => {
+      repository.findOne.mockResolvedValue({ id: 'port-123', name: 'Tech' });
+      const result = await service.update('port-123', {
+        stocks: null as any,
+      });
+
+      expect(repository.save).toHaveBeenCalled();
+      expect(result.allocatedWeight).toBe(0);
+      expect(result.isComplete).toBe(false);
     });
 
     it('should throw BadRequestException if update total weight > 100%', async () => {
@@ -225,6 +243,28 @@ describe('PortfolioService', () => {
       expect(result).toHaveLength(2);
       expect(result[0].allocatedAmount).toBe(60);
       expect(result[1].allocatedAmount).toBe(40);
+    });
+
+    it('should throw BadRequestException if null or invalid stocks array is provided to splitPortfolio', () => {
+      expect(() => service.splitPortfolio(null as any, 100)).toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('should deduplicate inline tickers keeping the last occurrence', () => {
+      const result = service.splitPortfolio(
+        [
+          { ticker: 'AAPL', allocationPercentage: 40 },
+          null as any,
+          { ticker: '', allocationPercentage: 10 } as any,
+          { ticker: 'AAPL', allocationPercentage: 100 },
+        ],
+        100,
+      );
+
+      expect(result).toHaveLength(1);
+      expect(result[0].ticker).toBe('AAPL');
+      expect(result[0].allocationPercentage).toBe(100);
     });
 
     it('should split portfolio with precision override parameter', () => {

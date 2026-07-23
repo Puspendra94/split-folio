@@ -14,6 +14,8 @@ describe('ApiConfigService', () => {
             return 'development';
           case 'PORT':
             return 3001;
+          case 'STORAGE_DRIVER':
+            return 'inmemory';
           case 'SHARE_QUANTITY_DECIMAL_PRECISION':
             return '3';
           case 'DEFAULT_STOCK_PRICE':
@@ -49,6 +51,10 @@ describe('ApiConfigService', () => {
     expect(service.port).toBe(3001);
   });
 
+  it('should return storageDriver', () => {
+    expect(service.storageDriver).toBe('inmemory');
+  });
+
   it('should return shareDecimalPrecision', () => {
     expect(service.shareDecimalPrecision).toBe(3);
   });
@@ -61,6 +67,7 @@ describe('ApiConfigService', () => {
     mockConfigService.get.mockReturnValue(undefined);
     expect(service.nodeEnv).toBe('development');
     expect(service.port).toBe(3001);
+    expect(service.storageDriver).toBe('inmemory');
     expect(service.shareDecimalPrecision).toBe(3);
     expect(service.defaultStockPrice).toBe(100);
   });

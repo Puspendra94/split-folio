@@ -1,9 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { getRepositoryToken } from '@nestjs/typeorm';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
+import { ORDER_REPOSITORY } from '../../../storage/storage.constants';
 import { OrderService } from '../order.service';
-import { OrderEntity, OrderStatusEnum } from '../order.entity';
-import { OrderItemEntity } from '../order-item.entity';
+import { OrderStatusEnum } from '../order.entity';
 import { PortfolioService } from '../../portfolio/portfolio.service';
 import { MarketService } from '../../market/market.service';
 import { OrderTypeEnum } from '../../../common/constants/order-type.enum';
@@ -66,12 +65,8 @@ describe('OrderService', () => {
       providers: [
         OrderService,
         {
-          provide: getRepositoryToken(OrderEntity),
+          provide: ORDER_REPOSITORY,
           useValue: orderRepository,
-        },
-        {
-          provide: getRepositoryToken(OrderItemEntity),
-          useValue: {},
         },
         {
           provide: PortfolioService,
@@ -132,6 +127,31 @@ describe('OrderService', () => {
           { ticker: 'AAPL', allocationPercentage: 60, customMarketPrice: null },
           { ticker: 'TSLA', allocationPercentage: 40, customMarketPrice: null },
         ],
+        100,
+        undefined,
+      );
+      expect(result.id).toBe('test-uuid-1234');
+    });
+
+    it('should handle portfolioId when portfolio.stocks is null or undefined', async () => {
+      portfolioService.findOne.mockResolvedValue({
+        id: 'port-no-stocks',
+        allocatedWeight: 100,
+        isComplete: true,
+        stocks: null,
+      });
+
+      portfolioService.splitPortfolio.mockReturnValue([]);
+
+      const dto = {
+        orderType: OrderTypeEnum.BUY,
+        totalAmount: 100,
+        portfolioId: 'port-no-stocks',
+      };
+
+      const result = await service.splitAndCreateOrder(dto);
+      expect(portfolioService.splitPortfolio).toHaveBeenCalledWith(
+        [],
         100,
         undefined,
       );

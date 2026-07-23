@@ -13,10 +13,17 @@ export class ApiConfigService {
     return this.configService.get<number>('PORT') || 3001;
   }
 
-  get shareDecimalPrecision(): number {
-    const val = this.configService.get<string>(
-      'SHARE_QUANTITY_DECIMAL_PRECISION',
+  get storageDriver(): string {
+    return (
+      this.configService.get<string>('STORAGE_DRIVER')?.toLowerCase() ||
+      'inmemory'
     );
+  }
+
+  get shareDecimalPrecision(): number {
+    const val =
+      this.configService.get<string>('SHARE_DECIMAL_PRECISION') ||
+      this.configService.get<string>('SHARE_QUANTITY_DECIMAL_PRECISION');
     return val ? parseInt(val, 10) : 3;
   }
 
