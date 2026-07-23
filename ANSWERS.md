@@ -82,3 +82,4 @@ LLMs were utilized as an agentic pair-programmer throughout the development life
 2. **Automated Unit Testing & 100% Coverage**: Generating comprehensive Jest unit tests covering edge cases in DTO validation, custom class-validator constraints, precision floor scaling, and in-memory map persistence, achieving 18 passed test suites (141 tests).
 3. **TypeORM Migration Generation**: Assisting in drafting and executing TypeORM database migration scripts (`AddAllocatedWeightAndIsActiveForOrderToPortfolio` and `RenameIsActiveForOrderToIsCompleteInPortfolio`).
 4. **Postman Collection Structuring**: Generating the full Postman Collection JSON (`split-folio.postman_collection.json`) complete with test assertion scripts and collection variables (`baseUrl`, `portfolioId`, `stockId`, `orderId`) for rapid API testing.
+5. **Design Pattern Auditing**: Leveraging AI to audit the codebase for enterprise design patterns.
