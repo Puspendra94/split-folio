@@ -1,0 +1,444 @@
+{
+  "info": {
+    "_postman_id": "a4d852e9-8472-4b21-a123-splitfolio001",
+    "name": "SplitFolio API Collection",
+    "description": "Postman collection for SplitFolio backend service - Model Portfolio Stock Splitting & Order Management System",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3001/api",
+      "type": "string"
+    },
+    {
+      "key": "orderId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "portfolioId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "stockId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health & Info",
+      "item": [
+        {
+          "name": "Root App Info",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/",
+              "host": ["{{baseUrl}}"],
+              "path": [""]
+            },
+            "description": "Check if API server is running"
+          },
+          "response": []
+        },
+        {
+          "name": "Check Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            },
+            "description": "Performs database connection health check using Terminus"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Portfolios CRUD",
+      "item": [
+        {
+          "name": "Create Model Portfolio",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData && jsonData.id) {",
+                  "    pm.collectionVariables.set('portfolioId', jsonData.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Tech Growth Model Portfolio\",\n  \"stocks\": [\n    {\n      \"ticker\": \"AAPL\",\n      \"allocationPercentage\": 60\n    },\n    {\n      \"ticker\": \"TSLA\",\n      \"allocationPercentage\": 40\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/portfolios",
+              "host": ["{{baseUrl}}"],
+              "path": ["portfolios"]
+            },
+            "description": "Creates a new model portfolio with validated 100% stock allocation, setting allocated_weight and is_complete status"
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Model Portfolios",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/portfolios",
+              "host": ["{{baseUrl}}"],
+              "path": ["portfolios"]
+            },
+            "description": "Retrieves all saved model portfolios with their stock allocations, allocated_weight, and is_complete"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Portfolio By ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/portfolios/{{portfolioId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["portfolios", "{{portfolioId}}"]
+            },
+            "description": "Retrieves details of a specific portfolio by ID"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Portfolio",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Balanced Tech Portfolio\",\n  \"stocks\": [\n    {\n      \"ticker\": \"AAPL\",\n      \"allocationPercentage\": 50\n    },\n    {\n      \"ticker\": \"TSLA\",\n      \"allocationPercentage\": 50\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/portfolios/{{portfolioId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["portfolios", "{{portfolioId}}"]
+            },
+            "description": "Updates portfolio name and stock allocations, re-evaluating allocated_weight and is_complete"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Portfolio",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/portfolios/{{portfolioId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["portfolios", "{{portfolioId}}"]
+            },
+            "description": "Deletes a model portfolio and its associated stocks"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Portfolio Stocks CRUD",
+      "item": [
+        {
+          "name": "Batch Upsert Stocks",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"stocks\": [\n    {\n      \"ticker\": \"AAPL\",\n      \"allocationPercentage\": 50\n    },\n    {\n      \"ticker\": \"TSLA\",\n      \"allocationPercentage\": 30\n    },\n    {\n      \"ticker\": \"GOOGL\",\n      \"allocationPercentage\": 20\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/portfolios/{{portfolioId}}/stocks/batch",
+              "host": ["{{baseUrl}}"],
+              "path": ["portfolios", "{{portfolioId}}", "stocks", "batch"]
+            },
+            "description": "Fetches existing stocks for portfolio, merges with incoming stocks (existing.merge(new) so incoming overrides existing), validates total weight <= 100%, batch inserts/updates stocks inside transaction, and updates portfolio allocated_weight and is_complete status."
+          },
+          "response": []
+        },
+        {
+          "name": "Add Stock to Portfolio (Upsert Single)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData && jsonData.id) {",
+                  "    pm.collectionVariables.set('stockId', jsonData.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ticker\": \"GOOGL\",\n  \"allocationPercentage\": 20,\n  \"customMarketPrice\": 175.25\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/portfolios/{{portfolioId}}/stocks",
+              "host": ["{{baseUrl}}"],
+              "path": ["portfolios", "{{portfolioId}}", "stocks"]
+            },
+            "description": "Adds or updates an individual stock allocation in a portfolio and recalculates allocated_weight and is_complete status"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Portfolio Stocks",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/portfolios/{{portfolioId}}/stocks",
+              "host": ["{{baseUrl}}"],
+              "path": ["portfolios", "{{portfolioId}}", "stocks"]
+            },
+            "description": "Lists all stock allocations for a portfolio"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Portfolio Stock By ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/portfolio-stocks/{{stockId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["portfolio-stocks", "{{stockId}}"]
+            },
+            "description": "Gets details of a single portfolio stock allocation"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Portfolio Stock",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"allocationPercentage\": 25,\n  \"customMarketPrice\": 180.00\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/portfolio-stocks/{{stockId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["portfolio-stocks", "{{stockId}}"]
+            },
+            "description": "Updates allocation percentage or custom market price for a portfolio stock and recalculates portfolio allocated_weight and is_complete"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Portfolio Stock",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/portfolio-stocks/{{stockId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["portfolio-stocks", "{{stockId}}"]
+            },
+            "description": "Removes a stock allocation from a portfolio and updates portfolio allocated_weight and is_complete"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Orders",
+      "item": [
+        {
+          "name": "Split Order (BUY - Standard Inline Portfolio)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData && jsonData.id) {",
+                  "    pm.collectionVariables.set('orderId', jsonData.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderType\": \"BUY\",\n  \"totalAmount\": 10000,\n  \"portfolio\": [\n    {\n      \"ticker\": \"AAPL\",\n      \"allocationPercentage\": 50\n    },\n    {\n      \"ticker\": \"TSLA\",\n      \"allocationPercentage\": 30\n    },\n    {\n      \"ticker\": \"GOOGL\",\n      \"allocationPercentage\": 20\n    }\n  ],\n  \"precision\": 3\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders/split",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "split"]
+            },
+            "description": "Splits a $10,000 BUY order across AAPL (50%), TSLA (30%), and GOOGL (20%) using inline portfolio array (validates 100% total allocation)"
+          },
+          "response": []
+        },
+        {
+          "name": "Split Order (BUY - By Portfolio ID)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData && jsonData.id) {",
+                  "    pm.collectionVariables.set('orderId', jsonData.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderType\": \"BUY\",\n  \"totalAmount\": 10000,\n  \"portfolioId\": \"{{portfolioId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders/split",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "split"]
+            },
+            "description": "Splits a $10,000 BUY order using an existing portfolioId from the database (validates portfolio isComplete = true)"
+          },
+          "response": []
+        },
+        {
+          "name": "Split Order (SELL - Custom Prices & Precision)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderType\": \"SELL\",\n  \"totalAmount\": 5000,\n  \"portfolio\": [\n    {\n      \"ticker\": \"AAPL\",\n      \"allocationPercentage\": 60,\n      \"customMarketPrice\": 185.50\n    },\n    {\n      \"ticker\": \"TSLA\",\n      \"allocationPercentage\": 40,\n      \"customMarketPrice\": 240.00\n    }\n  ],\n  \"precision\": 4\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders/split",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "split"]
+            },
+            "description": "Splits a $5,000 SELL order with custom market price overrides and 4 decimal places precision"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Historic Orders",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"]
+            },
+            "description": "Retrieves all historic split portfolio orders with itemized breakdowns"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Order By ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}"]
+            },
+            "description": "Retrieves details for a specific order by ID"
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,157 @@
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { PortfolioEntity } from './portfolio.entity';
+import {
+  PortfolioStockService,
+  CalculatedStockSplit,
+} from '../portfolio-stock/portfolio-stock.service';
+import { CreatePortfolioDto } from './dto/create-portfolio.dto';
+import { UpdatePortfolioDto } from './dto/update-portfolio.dto';
+
+export interface PortfolioStockInput {
+  ticker: string;
+  allocationPercentage: number;
+  customMarketPrice?: number | null;
+}
+
+@Injectable()
+export class PortfolioService {
+  constructor(
+    @InjectRepository(PortfolioEntity)
+    private readonly portfolioRepository: Repository<PortfolioEntity>,
+    private readonly portfolioStockService: PortfolioStockService,
+  ) {}
+
+  async create(dto: CreatePortfolioDto): Promise<PortfolioEntity> {
+    const totalWeight = Number(
+      (dto.stocks || [])
+        .reduce((sum, s) => sum + Number(s.allocationPercentage), 0)
+        .toFixed(2),
+    );
+
+    if (totalWeight > 100) {
+      throw new BadRequestException(
+        `Total portfolio allocation weight cannot exceed 100%. Current total weight: ${totalWeight}%.`,
+      );
+    }
+
+    const portfolio = this.portfolioRepository.create({
+      name: dto.name || 'Model Portfolio',
+      allocatedWeight: totalWeight,
+      isComplete: Math.abs(totalWeight - 100) <= 0.01,
+      stocks: (dto.stocks || []).map((stock) => ({
+        ticker: stock.ticker.trim().toUpperCase(),
+        allocationPercentage: stock.allocationPercentage,
+        customMarketPrice: stock.customMarketPrice,
+      })),
+    });
+
+    return this.portfolioRepository.save(portfolio);
+  }
+
+  async findAll(): Promise<PortfolioEntity[]> {
+    return this.portfolioRepository.find({
+      relations: ['stocks'],
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  async findOne(id: string): Promise<PortfolioEntity> {
+    const portfolio = await this.portfolioRepository.findOne({
+      where: { id },
+      relations: ['stocks'],
+    });
+
+    if (!portfolio) {
+      throw new NotFoundException(`Portfolio with ID "${id}" not found`);
+    }
+
+    return portfolio;
+  }
+
+  async update(id: string, dto: UpdatePortfolioDto): Promise<PortfolioEntity> {
+    const portfolio = await this.findOne(id);
+
+    if (dto.name !== undefined) {
+      portfolio.name = dto.name;
+    }
+
+    if (dto.stocks !== undefined) {
+      const totalWeight = Number(
+        (dto.stocks || [])
+          .reduce((sum, s) => sum + Number(s.allocationPercentage), 0)
+          .toFixed(2),
+      );
+
+      if (totalWeight > 100) {
+        throw new BadRequestException(
+          `Total portfolio allocation weight cannot exceed 100%. Current total weight: ${totalWeight}%.`,
+        );
+      }
+
+      portfolio.stocks = dto.stocks.map((stock) => ({
+        ticker: stock.ticker.trim().toUpperCase(),
+        allocationPercentage: stock.allocationPercentage,
+        customMarketPrice: stock.customMarketPrice,
+      })) as any;
+
+      portfolio.allocatedWeight = totalWeight;
+      portfolio.isComplete = Math.abs(totalWeight - 100) <= 0.01;
+    }
+
+    return this.portfolioRepository.save(portfolio);
+  }
+
+  async remove(id: string): Promise<{ message: string }> {
+    const portfolio = await this.findOne(id);
+    await this.portfolioRepository.remove(portfolio);
+    return { message: `Portfolio with ID "${id}" successfully deleted` };
+  }
+
+  /**
+   * Validates that stock allocation percentages sum up to 100%.
+   */
+  validatePortfolioAllocations(stocks: PortfolioStockInput[]): void {
+    if (!stocks || stocks.length === 0) {
+      throw new BadRequestException(
+        'Portfolio must contain at least one stock allocation',
+      );
+    }
+
+    const totalAllocation = stocks.reduce(
+      (sum, s) => sum + Number(s.allocationPercentage),
+      0,
+    );
+    if (Math.abs(totalAllocation - 100) > 0.01) {
+      throw new BadRequestException(
+        `Total portfolio allocation percentage must equal 100%. Current total: ${totalAllocation}%`,
+      );
+    }
+  }
+
+  /**
+   * Processes a model portfolio against a total investment amount.
+   */
+  splitPortfolio(
+    stocks: PortfolioStockInput[],
+    totalAmount: number,
+    precisionOverride?: number,
+  ): CalculatedStockSplit[] {
+    this.validatePortfolioAllocations(stocks);
+
+    return stocks.map((stock) =>
+      this.portfolioStockService.calculateStockSplit(
+        stock.ticker,
+        stock.allocationPercentage,
+        totalAmount,
+        stock.customMarketPrice,
+        precisionOverride,
+      ),
+    );
+  }
+}
